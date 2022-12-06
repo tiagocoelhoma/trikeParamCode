@@ -1,0 +1,446 @@
+classdef FesCyclingMechanicalParamRev01 < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure           matlab.ui.Figure
+        stateSimulation    matlab.ui.control.StateButton
+        torsoParam         matlab.ui.control.NumericEditField
+        torsoLabel         matlab.ui.control.Label
+        dParam             matlab.ui.control.Slider
+        LabelSlider        matlab.ui.control.Label
+        Label4             matlab.ui.control.Label
+        theta1Param        matlab.ui.control.NumericEditField
+        telescinclinLabel  matlab.ui.control.Label
+        aParam             matlab.ui.control.NumericEditField
+        CrankmLabel        matlab.ui.control.Label
+        cParam             matlab.ui.control.NumericEditField
+        ThighmLabel        matlab.ui.control.Label
+        fParam             matlab.ui.control.NumericEditField
+        ShankmLabel        matlab.ui.control.Label
+        eParam             matlab.ui.control.NumericEditField
+        FootmLabel         matlab.ui.control.Label
+        TextArea           matlab.ui.control.TextArea
+        kneeAngleAxes      matlab.ui.control.UIAxes
+        hipAngleAxes       matlab.ui.control.UIAxes
+    end
+
+
+    properties (Access = private)
+        Property % Description
+        a, b, c, d, e, f;
+        theta_torso, theta_knee, theta_hip;
+        theta1, theta2, theta3, theta4;
+        theta_1, theta_2, theta_3, theta_4;
+        simulationState;
+        y;
+    end
+
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            stateSimulationValueChanged(app);
+        end
+
+        % Value changed function: stateSimulation
+        function stateSimulationValueChanged(app, event)
+            app.simulationState = app.stateSimulation.Value;
+            app.e = app.eParam.Value;                    % foot
+            app.f = app.fParam.Value;                    % shank
+            app.a = app.aParam.Value;                    % crank
+            app.c = app.cParam.Value;                    % thigh
+            app.b = sqrt(app.e*app.e + app.f*app.f);     % r3 - coupler
+            app.d = app.dParam.Value; 
+            
+            app.theta_torso = app.torsoParam.Value;  
+            app.theta2 = 0:1:360;  % ângulo pedivela
+            app.theta1 = app.theta1Param.Value;          % crank inclination
+            app.theta_2 = deg2rad(app.theta2);
+            app.theta_1 = deg2rad(app.theta1);
+            
+            if(app.simulationState)
+                for i = 1:1:length(app.theta2)
+                    app.theta_2 = deg2rad(i);
+                    %--------------------------------------------------------------------
+                    % cálculo theta_4
+                
+                    K1 = app.d/app.a;
+                    K2 = app.d/app.c;
+                    K3 =(app.a*app.a-app.b*app.b+app.c*app.c+app.d*app.d)/(2*app.a*app.c);
+                
+                    A = K3 + K2*cos(app.theta_2 - app.theta_1) + K1*cos(app.theta_1) + cos(app.theta_2);
+                    B = -2*sin(app.theta_2) - 2*K1*sin(app.theta_1);
+                    C = K3 + K2*cos(app.theta_2 - app.theta_1) - K1*cos(app.theta_1) - cos(app.theta_2);
+                
+                    if((B*B-4*A*C)>=0)
+                        x = (-B - sqrt(B*B-4*A*C));
+                        app.theta_4 = 2*atan2(x,2*A);
+                        app.theta4 = rad2deg(app.theta_4)+360;
+                
+                        %--------------------------------------------------------------------
+                        % cálculo theta_3
+                    
+                        K4 = app.d/app.a;
+                        K5 = app.d/app.b;
+                        K6 =(app.a*app.a+app.b*app.b-app.c*app.c+app.d*app.d)/(2*app.a*app.b);
+                    
+                        D = K6 + K5*cos(app.theta_2 - app.theta_1) + K4*cos(app.theta_1) + cos(app.theta_2);
+                        E = -2*sin(app.theta_2) - 2*K4*sin(app.theta_1);
+                        F = K6 + K5*cos(app.theta_2 - app.theta_1) - K4*cos(app.theta_1) - cos(app.theta_2);
+                        if((E*E-4*D*F)>=0)
+                            x = (-E + sqrt(E*E-4*D*F));
+                            app.theta_3 = 2*atan2(x,2*D);
+                            app.theta3 = rad2deg(app.theta_3);
+                    
+                            %--------------------------------------------------------------------
+                            % cálculo theta_knee e theta_hip
+                            app.theta_hip(i) = app.theta4 - app.theta_torso;
+                            app.theta_knee(i) = 180 + app.theta4 - app.theta3 - rad2deg(atan2(app.e,app.f));
+                        else
+                            msgbox('outside limits');
+                            return
+                        end
+                    else 
+                        msgbox('outside limits');
+                        return
+                    end
+                end
+                plot(app.hipAngleAxes,[app.theta2],[app.theta_hip]);
+                plot(app.kneeAngleAxes,[app.theta2],[app.theta_knee]);    
+            end
+        end
+
+        % Value changed function: eParam
+        function eParamValueChanged(app, event)
+            app.e = app.eParam.Value;
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end    
+        end
+
+        % Value changed function: fParam
+        function fParamValueChanged(app, event)
+            app.f = app.fParam.Value;
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end
+        end
+
+        % Value changed function: cParam
+        function cParamValueChanged(app, event)
+            app.c = app.cParam.Value;
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end
+        end
+
+        % Value changed function: aParam
+        function aParamValueChanged(app, event)
+            app.a = app.aParam.Value;
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end
+        end
+
+        % Value changed function: theta1Param
+        function theta1ParamValueChanged(app, event)
+            app.theta1 = app.theta1Param.Value;
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end
+        end
+
+        % Value changed function: torsoParam
+        function torsoParamValueChanged(app, event)
+            app.theta_torso = app.torsoParam.Value;  
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end
+        end
+
+        % Value changed function: dParam
+        function dParamValueChanged(app, event)
+            app.d = app.dParam.Value;    
+            if(app.a + app.d < app.c + app.b)
+                %msgbox('This mechanism is a Grashof dopp.uble-crank'); 
+                stateSimulationValueChanged(app);
+            else
+                %msgbox('This mechanism is a Non-Grashof Type double-crank');
+                msgbox('outside limits');
+                return
+            end
+        end
+
+        % Value changing function: dParam
+        function dParamValueChanging(app, event)
+            app.d = event.Value;    
+            stateSimulationValueChanged(app);
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [101 101 640 480];
+            app.UIFigure.Name = 'UI Figure';
+
+            % Create hipAngleAxes
+            app.hipAngleAxes = uiaxes(app.UIFigure);
+            ylabel(app.hipAngleAxes, 'Hip angle [°]')
+            app.hipAngleAxes.FontName = 'Arial';
+            app.hipAngleAxes.FontWeight = 'bold';
+            app.hipAngleAxes.XLim = [0 360];
+            app.hipAngleAxes.XMinorTick = 'on';
+            app.hipAngleAxes.YMinorTick = 'on';
+            app.hipAngleAxes.XGrid = 'on';
+            app.hipAngleAxes.XMinorGrid = 'on';
+            app.hipAngleAxes.YGrid = 'on';
+            app.hipAngleAxes.YMinorGrid = 'on';
+            app.hipAngleAxes.GridAlpha = 0.15;
+            app.hipAngleAxes.MinorGridAlpha = 0.25;
+            app.hipAngleAxes.Box = 'on';
+            app.hipAngleAxes.Position = [237 225 373 196];
+
+            % Create kneeAngleAxes
+            app.kneeAngleAxes = uiaxes(app.UIFigure);
+            xlabel(app.kneeAngleAxes, 'crank angle [°]')
+            ylabel(app.kneeAngleAxes, 'Knee angle [°]')
+            app.kneeAngleAxes.FontName = 'Arial';
+            app.kneeAngleAxes.FontWeight = 'bold';
+            app.kneeAngleAxes.XLim = [0 360];
+            app.kneeAngleAxes.XMinorTick = 'on';
+            app.kneeAngleAxes.YMinorTick = 'on';
+            app.kneeAngleAxes.XGrid = 'on';
+            app.kneeAngleAxes.XMinorGrid = 'on';
+            app.kneeAngleAxes.YGrid = 'on';
+            app.kneeAngleAxes.YMinorGrid = 'on';
+            app.kneeAngleAxes.GridAlpha = 0.15;
+            app.kneeAngleAxes.MinorGridAlpha = 0.25;
+            app.kneeAngleAxes.Box = 'on';
+            app.kneeAngleAxes.Position = [237 10 373 213];
+
+            % Create TextArea
+            app.TextArea = uitextarea(app.UIFigure);
+            app.TextArea.HorizontalAlignment = 'center';
+            app.TextArea.FontName = 'Arial';
+            app.TextArea.FontWeight = 'bold';
+            app.TextArea.Position = [29 444 581 22];
+            app.TextArea.Value = {'TRIKE MECHANICAL PARAMETERS SIMULATION'};
+
+            % Create FootmLabel
+            app.FootmLabel = uilabel(app.UIFigure);
+            app.FootmLabel.HorizontalAlignment = 'right';
+            app.FootmLabel.FontName = 'Arial';
+            app.FootmLabel.FontWeight = 'bold';
+            app.FootmLabel.Position = [29 367 84 22];
+            app.FootmLabel.Text = 'Foot [m]  ';
+
+            % Create eParam
+            app.eParam = uieditfield(app.UIFigure, 'numeric');
+            app.eParam.Limits = [0 1.25];
+            app.eParam.ValueDisplayFormat = '%5.2f';
+            app.eParam.ValueChangedFcn = createCallbackFcn(app, @eParamValueChanged, true);
+            app.eParam.HorizontalAlignment = 'center';
+            app.eParam.FontName = 'Arial';
+            app.eParam.FontWeight = 'bold';
+            app.eParam.Position = [112 372 78 20];
+            app.eParam.Value = 0.18;
+
+            % Create ShankmLabel
+            app.ShankmLabel = uilabel(app.UIFigure);
+            app.ShankmLabel.HorizontalAlignment = 'right';
+            app.ShankmLabel.FontName = 'Arial';
+            app.ShankmLabel.FontWeight = 'bold';
+            app.ShankmLabel.Position = [40 337 73 22];
+            app.ShankmLabel.Text = 'Shank [m] ';
+
+            % Create fParam
+            app.fParam = uieditfield(app.UIFigure, 'numeric');
+            app.fParam.Limits = [0 1.25];
+            app.fParam.ValueDisplayFormat = '%5.2f';
+            app.fParam.ValueChangedFcn = createCallbackFcn(app, @fParamValueChanged, true);
+            app.fParam.HorizontalAlignment = 'center';
+            app.fParam.FontName = 'Arial';
+            app.fParam.FontWeight = 'bold';
+            app.fParam.Position = [112 342 78 20];
+            app.fParam.Value = 0.44;
+
+            % Create ThighmLabel
+            app.ThighmLabel = uilabel(app.UIFigure);
+            app.ThighmLabel.HorizontalAlignment = 'right';
+            app.ThighmLabel.FontName = 'Arial';
+            app.ThighmLabel.FontWeight = 'bold';
+            app.ThighmLabel.Position = [41 307 72 22];
+            app.ThighmLabel.Text = 'Thigh [m] ';
+
+            % Create cParam
+            app.cParam = uieditfield(app.UIFigure, 'numeric');
+            app.cParam.Limits = [0 1.5];
+            app.cParam.ValueDisplayFormat = '%5.2f';
+            app.cParam.ValueChangedFcn = createCallbackFcn(app, @cParamValueChanged, true);
+            app.cParam.HorizontalAlignment = 'center';
+            app.cParam.FontName = 'Arial';
+            app.cParam.FontWeight = 'bold';
+            app.cParam.Position = [112 312 78 20];
+            app.cParam.Value = 0.52;
+
+            % Create CrankmLabel
+            app.CrankmLabel = uilabel(app.UIFigure);
+            app.CrankmLabel.HorizontalAlignment = 'right';
+            app.CrankmLabel.FontName = 'Arial';
+            app.CrankmLabel.FontWeight = 'bold';
+            app.CrankmLabel.Position = [37 277 76 22];
+            app.CrankmLabel.Text = 'Crank [m] ';
+
+            % Create aParam
+            app.aParam = uieditfield(app.UIFigure, 'numeric');
+            app.aParam.Limits = [0 0.5];
+            app.aParam.ValueDisplayFormat = '%5.2f';
+            app.aParam.ValueChangedFcn = createCallbackFcn(app, @aParamValueChanged, true);
+            app.aParam.HorizontalAlignment = 'center';
+            app.aParam.FontWeight = 'bold';
+            app.aParam.Position = [112 282 78 20];
+            app.aParam.Value = 0.19;
+
+            % Create telescinclinLabel
+            app.telescinclinLabel = uilabel(app.UIFigure);
+            app.telescinclinLabel.HorizontalAlignment = 'right';
+            app.telescinclinLabel.FontName = 'Arial';
+            app.telescinclinLabel.FontWeight = 'bold';
+            app.telescinclinLabel.Position = [12 248 101 22];
+            app.telescinclinLabel.Text = 'telesc. inclin. [°] ';
+
+            % Create theta1Param
+            app.theta1Param = uieditfield(app.UIFigure, 'numeric');
+            app.theta1Param.Limits = [0 360];
+            app.theta1Param.ValueDisplayFormat = '%5.2f';
+            app.theta1Param.ValueChangedFcn = createCallbackFcn(app, @theta1ParamValueChanged, true);
+            app.theta1Param.HorizontalAlignment = 'center';
+            app.theta1Param.FontName = 'Arial';
+            app.theta1Param.FontWeight = 'bold';
+            app.theta1Param.Position = [112 252 78 20];
+            app.theta1Param.Value = 170;
+
+            % Create Label4
+            app.Label4 = uilabel(app.UIFigure);
+            app.Label4.HorizontalAlignment = 'center';
+            app.Label4.FontName = 'Arial';
+            app.Label4.FontWeight = 'bold';
+            app.Label4.Position = [46 406 124 15];
+            app.Label4.Text = 'INPUT PARAMETERS';
+
+            % Create LabelSlider
+            app.LabelSlider = uilabel(app.UIFigure);
+            app.LabelSlider.HorizontalAlignment = 'center';
+            app.LabelSlider.FontName = 'Arial';
+            app.LabelSlider.FontWeight = 'bold';
+            app.LabelSlider.Position = [72 186 81 15];
+            app.LabelSlider.Text = 'Telescope [m]';
+
+            % Create dParam
+            app.dParam = uislider(app.UIFigure);
+            app.dParam.Limits = [0 1];
+            app.dParam.MajorTicks = [0 0.25 0.5 0.75 1 1.25];
+            app.dParam.ValueChangedFcn = createCallbackFcn(app, @dParamValueChanged, true);
+            app.dParam.ValueChangingFcn = createCallbackFcn(app, @dParamValueChanging, true);
+            app.dParam.FontName = 'Arial';
+            app.dParam.FontWeight = 'bold';
+            app.dParam.Position = [28 173 170 3];
+            app.dParam.Value = 0.65;
+
+            % Create torsoLabel
+            app.torsoLabel = uilabel(app.UIFigure);
+            app.torsoLabel.HorizontalAlignment = 'right';
+            app.torsoLabel.FontName = 'Arial';
+            app.torsoLabel.FontWeight = 'bold';
+            app.torsoLabel.Position = [56 218 57 22];
+            app.torsoLabel.Text = 'torso [°] ';
+
+            % Create torsoParam
+            app.torsoParam = uieditfield(app.UIFigure, 'numeric');
+            app.torsoParam.Limits = [0 90];
+            app.torsoParam.ValueDisplayFormat = '%5.2f';
+            app.torsoParam.ValueChangedFcn = createCallbackFcn(app, @torsoParamValueChanged, true);
+            app.torsoParam.HorizontalAlignment = 'center';
+            app.torsoParam.FontName = 'Arial';
+            app.torsoParam.FontWeight = 'bold';
+            app.torsoParam.Position = [112 222 78 20];
+            app.torsoParam.Value = 45;
+
+            % Create stateSimulation
+            app.stateSimulation = uibutton(app.UIFigure, 'state');
+            app.stateSimulation.ValueChangedFcn = createCallbackFcn(app, @stateSimulationValueChanged, true);
+            app.stateSimulation.Text = 'Simulate';
+            app.stateSimulation.FontName = 'Arial';
+            app.stateSimulation.Position = [22 44 181 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = FesCyclingMechanicalParamRev01
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
